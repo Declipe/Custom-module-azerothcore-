@@ -25,6 +25,7 @@
 #include "Language.h"
 #include "Chat.h"
 #include "Channel.h"
+#include "MapManager.h"
 #include "CreatureTextMgr.h"
 #include "SmartScriptMgr.h"
 #include "DatabaseEnv.h"
@@ -75,7 +76,7 @@ public:
     //void OnAfterConfigLoad(bool /*reload*/)
     void OnStartup()
     {
-        AutoLearnEnable = sConfigMgr->GetOption<bool>("AutoLearn.Enable", true);
+        AutoLearnEnable = sConfigMgr->GetBoolDefault("AutoLearn.Enable", true);
         if (!AutoLearnEnable)
             return;
 
@@ -85,33 +86,33 @@ public:
         OnLoginSpellMask = 0;
         OnCreateSpellMask = 0;
 
-        if (sConfigMgr->GetOption<bool>("AutoLearn.Check.Level", true))
+        if (sConfigMgr->GetBoolDefault("AutoLearn.Check.Level", true))
         {
-            if (sConfigMgr->GetOption<bool>("AutoLearn.SpellClass", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.SpellClass", true))
                 OnLevelSpellMask += SPELL_MASK_CLASS;
-            if (sConfigMgr->GetOption<bool>("AutoLearn.SpellRiding", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.SpellRiding", true))
                 OnLevelSpellMask += SPELL_MASK_RIDING;
-            if (sConfigMgr->GetOption<bool>("AutoLearn.SpellMount", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.SpellMount", true))
                 OnLevelSpellMask += SPELL_MASK_MOUNT;
-            if (sConfigMgr->GetOption<bool>("AutoLearn.SpellWeapon", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.SpellWeapon", true))
                 OnLevelSpellMask += SPELL_MASK_WEAPON;
-            if (sConfigMgr->GetOption<bool>("AutoLearn.DualSpec", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.DualSpec", true))
                 OnLevelSpellMask += SPELL_MASK_DUAL_SPEC;
 
-            if (sConfigMgr->GetOption<bool>("AutoLearn.Login.Spell", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.Login.Spell", true))
                 OnLoginSpellMask += OnLevelSpellMask;
 
-            if (sConfigMgr->GetOption<bool>("AutoLearn.Create.Spell", true))
+            if (sConfigMgr->GetBoolDefault("AutoLearn.Create.Spell", true))
                 OnCreateSpellMask += OnLevelSpellMask;
         }
 
-        if (sConfigMgr->GetOption<bool>("AutoLearn.SpellProfession", true))
+        if (sConfigMgr->GetBoolDefault("AutoLearn.SpellProfession", true))
             OnSkillSpellMask += SPELL_MASK_PROFESSION;
 
-        if (sConfigMgr->GetOption<bool>("AutoLearn.Login.Skill", true))
+        if (sConfigMgr->GetBoolDefault("AutoLearn.Login.Skill", true))
             OnLoginSpellMask += OnSkillSpellMask;
 
-        if (sConfigMgr->GetOption<bool>("AutoLearn.Create.Skill", true))
+        if (sConfigMgr->GetBoolDefault("AutoLearn.Create.Skill", true))
             OnCreateSpellMask += OnSkillSpellMask;
 
         if (loadSpellMask != (OnLevelSpellMask | OnSkillSpellMask))
@@ -126,12 +127,12 @@ public:
         if (spellMask == 0)
             return;
 
-        LOG_ERROR("server", "Loading AutoLearn...{}");
+        sLog->outError("Loading AutoLearn...");
         uint32 oldMSTime = getMSTime();
 
         QueryResult result;
 
-        result = WorldDatabase.Query("SELECT spellid, SpellMask, RequiredClassMask, RequiredRaceMask, RequiredLevel, RequiredSpellId, RequiredSkillId, RequiredSkillValue FROM `world_autolearn`");
+        result = WorldDatabase.PQuery("SELECT spellid, SpellMask, RequiredClassMask, RequiredRaceMask, RequiredLevel, RequiredSpellId, RequiredSkillId, RequiredSkillValue FROM `world_autolearn`");
 
         if (!result)
             return;
@@ -143,18 +144,19 @@ public:
             Field* fields = result->Fetch();
 
             LearnSpellForClassInfo Spell;
-            Spell.spellid = fields[0].Get<uint32>();
-            Spell.SpellMask = fields[1].Get<uint16>();
-            Spell.RequiredClassMask = fields[2].Get<uint32>();
-            Spell.RequiredRaceMask = fields[3].Get<uint32>();
-            Spell.RequiredLevel = fields[4].Get<uint8>();
-            Spell.RequiredSpellId = fields[5].Get<uint32>();
-            Spell.RequiredSkillId = fields[6].Get<uint16>();
-            Spell.RequiredSkillValue = fields[7].Get<uint16>();
+
+            Spell.spellid = fields[0].GetUInt32();
+            Spell.SpellMask = fields[1].GetUInt16();
+            Spell.RequiredClassMask = fields[2].GetUInt32();
+            Spell.RequiredRaceMask = fields[3].GetUInt32();
+            Spell.RequiredLevel = fields[4].GetUInt8();
+            Spell.RequiredSpellId = fields[5].GetUInt32();
+            Spell.RequiredSkillId = fields[6].GetUInt16();
+            Spell.RequiredSkillValue = fields[7].GetUInt16();
 
             if (!sSpellMgr->GetSpellInfo(Spell.spellid))
             {
-                LOG_ERROR("server", "AutoLearn: Spell (ID: {}) non-existing", Spell.spellid);
+                sLog->outError("AutoLearn: Spell (ID: %u) non-existing", Spell.spellid);
                 continue;
             }
 
@@ -164,19 +166,19 @@ public:
 
             if (Spell.RequiredClassMask != 0 && !(Spell.RequiredClassMask & CLASSMASK_ALL_PLAYABLE))
             {
-                LOG_DEBUG("server", "AutoLearn: Spell (ID: {}) RequiredClassMask (Mask: {}) non-existing", Spell.spellid, Spell.RequiredClassMask);
+                sLog->outDetail("AutoLearn: Spell (ID: %u) RequiredClassMask (Mask: %u) non-existing", Spell.spellid, Spell.RequiredClassMask);
                 continue;
             }
 
             if (Spell.RequiredRaceMask != 0 && !(Spell.RequiredRaceMask & RACEMASK_ALL_PLAYABLE))
             {
-                LOG_DEBUG("server", "AutoLearn: Spell (ID: {}) RequiredRaceMask (Mask: {}) non-existing", Spell.spellid, Spell.RequiredRaceMask);
+                sLog->outDetail("AutoLearn: Spell (ID: %u) RequiredRaceMask (Mask: %u) non-existing", Spell.spellid, Spell.RequiredRaceMask);
                 continue;
             }
 
             if (Spell.RequiredSpellId != 0 && !sSpellMgr->GetSpellInfo(Spell.RequiredSpellId))
             {
-                LOG_DEBUG("server", "AutoLearn: Spell (ID: {}) RequiredSpellId (ID: {}) non-existing", Spell.spellid, Spell.RequiredSpellId);
+                sLog->outDetail("AutoLearn: Spell (ID: %u) RequiredSpellId (ID: %u) non-existing", Spell.spellid, Spell.RequiredSpellId);
                 continue;
             }
 
@@ -184,7 +186,7 @@ public:
             ++count;
         } while (result->NextRow());
 
-        LOG_INFO("server",">> Loaded {} spells for AutoLearn in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+        sLog->outString(">> Loaded %u spells for AutoLearn in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
     }
 };
 
@@ -194,7 +196,7 @@ public:
     Mod_AutoLearn_PlayerScript() : PlayerScript("Mod_AutoLearn_PlayerScript") { }
 
     // Called when a player's level changes (right before the level is applied)
-    void OnLevelChanged(Player* player, uint8 oldLevel) override
+    void OnLevelChanged(Player* player, uint8 oldLevel)
     {
         if (!AutoLearnEnable)
             return;
@@ -212,7 +214,7 @@ public:
     }
 
     // Called when a player is created.
-    void OnCreate(Player* player) override
+    void OnCreate(Player* player)
     {
         if (!AutoLearnEnable || !OnCreateSpellMask)
             return;
@@ -223,7 +225,7 @@ public:
     }
 
     // Called when a player skill update
-    void OnPlayerSkillUpdate(Player* Player, uint16 SkillId, uint16 /*SkillValue*/, uint16 SkillNewValue) override
+    void OnPlayerSkillUpdate(Player* Player, uint16 SkillId, uint16 /*SkillValue*/, uint16 SkillNewValue)
     {
         if (!AutoLearnEnable)
             return;

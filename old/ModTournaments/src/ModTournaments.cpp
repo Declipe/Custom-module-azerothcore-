@@ -1,4 +1,5 @@
 #include "Config.h"
+//#include "GuildMgr.h"
 #include "Player.h"
 #include "Battleground.h"
 #include "BattlegroundMgr.h"
@@ -8,7 +9,6 @@
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
 #include "World.h"
-#include "MapMgr.h"
 #include "WorldSession.h"
 #include "Group.h"
 #include "AchievementMgr.h"
@@ -25,6 +25,7 @@
 #include "Language.h"
 #include "Chat.h"
 #include "Channel.h"
+#include "MapManager.h"
 #include "CreatureTextMgr.h"
 #include "SmartScriptMgr.h"
 #include "DatabaseEnv.h"
@@ -34,7 +35,6 @@
 #include "StringFormat.h"
 #include <fstream>
 #include <unordered_map>
-#include "ChatCommand.h"
 
 #define SQL_TEMPLATE "SELECT `entry`, `level`, `time_limit`, `say_start`, `say_win`, `say_lose`, `chest_id`, `point_id`, `req_quest_id`, `kill_credit`, `menu_string` FROM `world_tournaments` ORDER BY `entry`, `level` DESC"
 #define SQL_CREATURE "SELECT `id`, `tournament_entry`, `tournament_level`, `entry`, `count`, `from_point_id`, `to_point_id`, `time` FROM `world_tournament_creature` ORDER BY `tournament_level`, `time`"
@@ -159,13 +159,13 @@ TournamentTemplate* TournamentManager::getTournament(uint32 entry)
 TournamentLevel* TournamentManager::getTournamentLevel(uint32 entry, uint32 level)
 {
     if (TournamentDebug)
-        LOG_ERROR("server", "TournamentManager::getTournamentLevel entry: %u level: %u", entry, level);
+        sLog->outError("TournamentManager::getTournamentLevel entry: %u level: %u", entry, level);
 
     TournamentTemplate* tournament = getTournament(entry);
     if (!tournament)
     {
         if (TournamentDebug)
-            LOG_ERROR("server", "TournamentManager::getTournamentLevel not exists entry: %u level: %u", entry, level);
+            sLog->outError("TournamentManager::getTournamentLevel not exists entry: %u level: %u", entry, level);
         return nullptr;
     }
 
@@ -174,7 +174,7 @@ TournamentLevel* TournamentManager::getTournamentLevel(uint32 entry, uint32 leve
         return (*itr).second;
 
     if (TournamentDebug)
-        LOG_ERROR("server", "TournamentManager::getTournamentLevel not exists level: %u for entry: %u", level, entry);
+        sLog->outError("TournamentManager::getTournamentLevel not exists level: %u for entry: %u", level, entry);
     return nullptr;
 }
 
@@ -252,34 +252,34 @@ void TournamentManager::load(bool reload)
 
     clear();
 
-    LOG_INFO("server.loading", "Loading Tournaments...");
+    sLog->outDetail("Loading Tournaments...");
     uint32 oldMSTime;
     QueryResult result;
     uint16 count;
 
     /*============ POINTS ============*/
     if (TournamentDebug)
-        LOG_INFO("server.loading", "Start loadig points");
+        sLog->outDetail("Start loadig points");
     oldMSTime = getMSTime();
-    result = WorldDatabase.Query(SQL_POINTS);
+    result = WorldDatabase.PQuery(SQL_POINTS);
     count = 0;
     if (!result)
-        LOG_INFO("server.loading", ">> `tournament_points` is empty");
+        sLog->outDetail(">> `tournament_points` is empty");
     do
     {
         Field* fields = result->Fetch();
 
         PointOnTournament* point = new PointOnTournament();
-        point->id = fields[0].Get<uint32>();
-        point->map = fields[1].Get<uint32>();
-        point->x = fields[2].Get<float>();
-        point->y = fields[3].Get<float>();
-        point->z = fields[4].Get<float>();
-        point->o = fields[5].Get<float>();
+        point->id = fields[0].GetUInt32();
+        point->map = fields[1].GetUInt32();
+        point->x = fields[2].GetFloat();
+        point->y = fields[3].GetFloat();
+        point->z = fields[4].GetFloat();
+        point->o = fields[5].GetFloat();
 
-        if (!MapMgr::IsValidMapCoord(point->map, point->x, point->y, point->z, point->o))
+        if (!MapManager::IsValidMapCoord(point->map, point->x, point->y, point->z, point->o))
         {
-            LOG_INFO("server.loading", "Wrong position for point id %u in `world_tournament_points` table, ignoring.", point->id);
+            sLog->outDetail("Wrong position for point id %u in `world_tournament_points` table, ignoring.", point->id);
             delete point;
             continue;
         }
@@ -287,57 +287,57 @@ void TournamentManager::load(bool reload)
         points[point->id] = point;
         ++count;
     } while (result->NextRow());
-    LOG_INFO("server.loading", ">> Loaded %u points for TournamentManager in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+    sLog->outDetail(">> Loaded %u points for TournamentManager in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
     if (TournamentDebug)
-        LOG_INFO("server.loading", "End loadig points");
+        sLog->outDetail("End loadig points");
     /*============ POINTS ============*/
 
    /*============ TEMPLATES ============*/
     if (TournamentDebug)
-        LOG_INFO("server.loading", "Start loadig templates");
+        sLog->outDetail("Start loadig templates");
     oldMSTime = getMSTime();
-    result = WorldDatabase.Query(SQL_TEMPLATE);
+    result = WorldDatabase.PQuery(SQL_TEMPLATE);
     count = 0;
     if (!result)
-        LOG_INFO("server.loading", ">> `world_tournaments` is empty");
+        sLog->outDetail(">> `world_tournaments` is empty");
     do
     {
         Field* fields = result->Fetch();
 
         TournamentLevel* level = new TournamentLevel();
-        level->entry = fields[0].Get<uint32>();
-        level->level = fields[1].Get<uint32>();
-        level->timeLimit = fields[2].Get<uint32>();
-        level->sayStart = fields[3].Get<uint32>();
-        level->sayWin = fields[4].Get<uint32>();
-        level->sayLose = fields[5].Get<uint32>();
-        level->chest = fields[6].Get<uint32>();
-        level->point = fields[7].Get<uint32>();
-        level->reqQuest = fields[8].Get<uint32>();
-        level->killCredit = fields[9].Get<uint32>();
-        level->menuString = fields[10].Get<uint32>();
+        level->entry = fields[0].GetUInt32();
+        level->level = fields[1].GetUInt32();
+        level->timeLimit = fields[2].GetUInt32();
+        level->sayStart = fields[3].GetUInt32();
+        level->sayWin = fields[4].GetUInt32();
+        level->sayLose = fields[5].GetUInt32();
+        level->chest = fields[6].GetUInt32();
+        level->point = fields[7].GetUInt32();
+        level->reqQuest = fields[8].GetUInt32();
+        level->killCredit = fields[9].GetUInt32();
+        level->menuString = fields[10].GetUInt32();
 
         if (level->point && !pointExists(level->point))
         {
-            LOG_ERROR("server", "Wrong point_id %u for level %u in `world_tournaments` table, ignoring.", level->point, level->level);
+            sLog->outError("Wrong point_id %u for level %u in `world_tournaments` table, ignoring.", level->point, level->level);
             level->point = 0;
         }
 
         if (level->chest && !sObjectMgr->GetGameObjectTemplate(level->chest))
         {
-            LOG_ERROR("server", "Wrong chest %u for level %u in `world_tournaments` table, ignoring.", level->chest, level->level);
+            sLog->outError("Wrong chest %u for level %u in `world_tournaments` table, ignoring.", level->chest, level->level);
             level->chest = 0;
         }
 
         if (level->reqQuest && !sObjectMgr->GetQuestTemplate(level->reqQuest))
         {
-            LOG_ERROR("server", "Wrong reqQuest %u for level %u in `world_tournaments` table, ignoring.", level->reqQuest, level->level);
+            sLog->outError("Wrong reqQuest %u for level %u in `world_tournaments` table, ignoring.", level->reqQuest, level->level);
             level->reqQuest = 0;
         }
 
         if (level->menuString && !sObjectMgr->GetAcoreString(level->menuString))
         {
-            LOG_ERROR("server","Wrong menuString %u for level %u in `world_tournaments` table, ignoring.", level->menuString, level->level);
+            sLog->outError("Wrong menuString %u for level %u in `world_tournaments` table, ignoring.", level->menuString, level->level);
             level->menuString = 0;
         }
 
@@ -353,77 +353,77 @@ void TournamentManager::load(bool reload)
         tournaments[level->entry]->levels[level->level] = level;
         ++count;
     } while (result->NextRow());
-    LOG_INFO("server.loading", ">> Loaded %u templates for TournamentManager in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+    sLog->outDetail(">> Loaded %u templates for TournamentManager in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
     if (TournamentDebug)
-        LOG_INFO("server.loading", "End loadig templates");
+        sLog->outDetail("End loadig templates");
     /*============ TEMPLATES ============*/
 
    /*============ CREATURES ============*/
     if (TournamentDebug)
-        LOG_INFO("server.loading", "Start loadig creatures");
+        sLog->outDetail("Start loadig creatures");
     oldMSTime = getMSTime();
-    result = WorldDatabase.Query(SQL_CREATURE);
+    result = WorldDatabase.PQuery(SQL_CREATURE);
     count = 0;
     if (!result)
-        LOG_INFO("server.loading", ">> `world_tournament_creature` is empty");
+        sLog->outDetail(">> `world_tournament_creature` is empty");
     do
     {
         Field* fields = result->Fetch();
 
         TournamentCreature* creature = new TournamentCreature();
-        creature->id = fields[0].Get<uint32>();
-        creature->tournament = fields[1].Get<uint32>();
-        creature->level = fields[2].Get<uint32>();
-        creature->entry = fields[3].Get<uint32>();
-        creature->count = fields[4].Get<uint32>();
-        creature->point = fields[5].Get<uint32>();
-        creature->move = fields[6].Get<uint32>();
-        creature->time = fields[7].Get<uint32>();
+        creature->id = fields[0].GetUInt32();
+        creature->tournament = fields[1].GetUInt32();
+        creature->level = fields[2].GetUInt32();
+        creature->entry = fields[3].GetUInt32();
+        creature->count = fields[4].GetUInt32();
+        creature->point = fields[5].GetUInt32();
+        creature->move = fields[6].GetUInt32();
+        creature->time = fields[7].GetUInt32();
         creature->spawn = false;
 
         if (TournamentDebug)
-            LOG_INFO("server.loading", "TournamentManager::load -> check creature %u", creature->id);
+            sLog->outDetail("TournamentManager::load -> check creature %u", creature->id);
 
         if (!existsLevelTournament(creature->tournament, creature->level))
         {
-            LOG_ERROR("server","Wrong tournament %u level %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->tournament, creature->level, creature->id);
+            sLog->outError("Wrong tournament %u level %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->tournament, creature->level, creature->id);
             delete creature;
             continue;
         }
 
         if (!pointExists(creature->point))
         {
-            LOG_ERROR("server","Wrong from point %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->point, creature->id);
+            sLog->outError("Wrong from point %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->point, creature->id);
             delete creature;
             continue;
         }
 
         if (!pointExists(creature->move))
         {
-            LOG_ERROR("server","Wrong to point %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->move, creature->id);
+            sLog->outError("Wrong to point %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->move, creature->id);
             creature->move = 0;
         }
 
         if (!sObjectMgr->GetCreatureTemplate(creature->entry))
         {
-            LOG_ERROR("server", "Wrong entry %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->entry, creature->id);
+            sLog->outError("Wrong entry %u for creature id %u in `world_tournament_creature` table, ignoring.", creature->entry, creature->id);
             delete creature;
             continue;
         }
 
         if (TournamentDebug)
-            LOG_INFO("server.loading", "TournamentManager::load -> end check creature %u", creature->id);
+            sLog->outDetail("TournamentManager::load -> end check creature %u", creature->id);
 
         tournaments[creature->tournament]->levels[creature->level]->creatures.push_back(creature);
 
         if (TournamentDebug)
-            LOG_INFO("server.loading", "TournamentManager::load -> creature %u added", creature->id);
+            sLog->outDetail("TournamentManager::load -> creature %u added", creature->id);
 
         ++count;
     } while (result->NextRow());
-    LOG_INFO("server.loading", ">> Loaded %u creatures for TournamentManager in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
+    sLog->outDetail(">> Loaded %u creatures for TournamentManager in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
     if (TournamentDebug)
-        LOG_INFO("server.loading", "end loadig creatures");
+        sLog->outDetail("end loadig creatures");
     /*============ CREATURES ============*/
 }
 
@@ -460,7 +460,7 @@ void TournamentManager::clear()
 void TournamentManager::reset(uint32 entry)
 {
     if (TournamentDebug)
-        LOG_INFO("server.loading", "TournamentManager::reset: %u", entry);
+        sLog->outDetail("TournamentManager::reset: %u", entry);
 
 
     TournamentTemplate* tournament = getTournament(entry);
@@ -481,12 +481,12 @@ void TournamentManager::reset(uint32 entry)
 void TournamentManager::start(uint32 entry, uint32 level, Player* player)
 {
     if (TournamentDebug)
-        LOG_INFO("server.loading", "TournamentManager::start tournament: %u level: %u", entry, level);
+        sLog->outDetail("TournamentManager::start tournament: %u level: %u", entry, level);
 
     if (!existsLevelTournament(entry, level))
     {
         if (TournamentDebug)
-            LOG_INFO("server.loading", "TournamentManager::start, not exists tournament/level: %u/%u", entry, level);
+            sLog->outDetail("TournamentManager::start, not exists tournament/level: %u/%u", entry, level);
         return;
     }
 
@@ -494,14 +494,14 @@ void TournamentManager::start(uint32 entry, uint32 level, Player* player)
     if (!tournament)
     {
         if (TournamentDebug)
-            LOG_ERROR("server.loading", "TournamentManager::start, not exists tournament: %u", entry);
+            sLog->outError("TournamentManager::start, not exists tournament: %u", entry);
         return;
     }
 
     if (tournament->inProgress)
     {
         if (TournamentDebug)
-            LOG_INFO("server.loading", "TournamentManager::start, tournament: %u in progress!!", entry);
+            sLog->outDetail("TournamentManager::start, tournament: %u in progress!!", entry);
         return;
     }
 
@@ -552,7 +552,7 @@ void TournamentManager::updateTournament(uint32 entry, uint32 diff)
         if (!(*itr)->spawn && tournament->current->time >= (*itr)->time)
         {
             if (TournamentDebug)
-                LOG_INFO("server.loading", "TournamentManager::update -> spawn %u", (*itr)->entry);
+                sLog->outDetail("TournamentManager::update -> spawn %u", (*itr)->entry);
 
             PointOnTournament const* point = getPoint((*itr)->point);
             PointOnTournament const* move = nullptr;
@@ -596,7 +596,7 @@ void TournamentManager::update(uint32 diff)
 void TournamentManager::stop(uint32 entry, bool win)
 {
     if (TournamentDebug)
-        LOG_INFO("server.loading", "TournamentManager::stop win: %i", int(win));
+        sLog->outDetail("TournamentManager::stop win: %i", int(win));
 
     TournamentTemplate* tournament = getTournament(entry);
     if (!tournament)
@@ -635,15 +635,14 @@ void TournamentManager::stop(uint32 entry, bool win)
     if (tournament->organizer && tournament->current->killCredit)
     {
         ObjectList* units = new ObjectList();
-        Acore::AllWorldObjectsInRange u_check(tournament->organizer, 60.0f);
-        Acore::WorldObjectListSearcher<Acore::AllWorldObjectsInRange> searcher(tournament->organizer, *units, u_check);
-        //tournament->organizer->VisitNearbyObject(60.0f, searcher);
-        Cell::VisitAllObjects(tournament->organizer, searcher, 60.0f);
+        acore::AllWorldObjectsInRange u_check(tournament->organizer, 60.0f);
+        acore::WorldObjectListSearcher<acore::AllWorldObjectsInRange> searcher(tournament->organizer, *units, u_check);
+        tournament->organizer->VisitNearbyObject(60.0f, searcher);
 
         if (!units->empty())
             for (ObjectList::const_iterator itr = units->begin(); itr != units->end(); ++itr)
                 if ((*itr)->GetTypeId() == TYPEID_PLAYER)
-                    ((Player*)(*itr))->KilledMonsterCredit(tournament->current->killCredit);
+                    ((Player*)(*itr))->KilledMonsterCredit(tournament->current->killCredit, 0);
 
         delete units;
     }
@@ -700,14 +699,14 @@ void TournamentManager::addGossip(Creature* creature, Player* player)
         return;
 
     if (TournamentDebug)
-        LOG_INFO("server.loading", "TournamentManager::addGossip");
+        sLog->outDetail("TournamentManager::addGossip");
 
     char gossipTextFormat[100];
 
     if (TournamentLadder)
     {
         if (TournamentDebug)
-            LOG_INFO("server.loading", "TournamentManager::addGossip -> TournamentLadder: level %u", tournament->level);
+            sLog->outDetail("TournamentManager::addGossip -> TournamentLadder: level %u", tournament->level);
 
         uint32 newLevel = tournament->level + 1;
 
@@ -783,7 +782,7 @@ public:
         if (TournamentEnable && action > GOSSIP_ACTION_INFO_DEF)
             TournamentMgr.start(creature->GetOriginalEntry(), action - GOSSIP_ACTION_INFO_DEF, player);
 
-        CloseGossipMenuFor(player);
+        player->CLOSE_GOSSIP_MENU();
         return true;
     }
 };
@@ -816,35 +815,21 @@ public:
     }
 };
 
-using namespace Acore::ChatCommands;
-
 class ModTournamentsCommandScript : public CommandScript
 {
 public:
     ModTournamentsCommandScript() : CommandScript("ModTournamentsCommandScript") { }
-    
-    ChatCommandTable GetCommands() const override
+
+    std::vector<ChatCommand> GetCommands() const override
     {
-        static ChatCommandTable gladiatorCommandTable =
+        static std::vector<ChatCommand> commandTable =
+        //static std::vector<ChatCommand> gladiatorCommandTable =
         {
-            { "reload",      HandleGladiatorsChatCommand,      SEC_ADMINISTRATOR,    Console::No },
-        };
-        static ChatCommandTable commandTable =
-        {
-            { "gladiator", gladiatorCommandTable }
+            { "gladiator",      SEC_ADMINISTRATOR,  false, &HandleGladiatorsChatCommand,       "" },
         };
         return commandTable;
     }
-    /*
-     ChatCommandTable GetCommands() const override
-    {
-        static ChatCommandTable commandTable =
-        {
-            { "gladiator",           HandleGladiatorsChatCommand,  SEC_ADMINISTRATOR,         Console::Yes }
-        };
-        return commandTable;
-    }
-    */
+
     static bool HandleGladiatorsChatCommand(ChatHandler* /*handler*/, char const* args)
     {
         if (!TournamentEnable || !*args)
